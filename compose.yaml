@@ -14,6 +14,8 @@ services:
       LLAMA_CPP_MODEL_ALIAS: "${LLAMA_CPP_MODEL_ALIAS:-qwen3-4b}"
       LLAMA_CPP_CONTEXT_SIZE: "${LLAMA_CPP_CONTEXT_SIZE:-4096}"
       LLAMA_CPP_SLEEP_IDLE_SECONDS: "${LLAMA_CPP_SLEEP_IDLE_SECONDS:-60}"
+      LLAMA_CPP_GPU_LAYERS: "${LLAMA_CPP_GPU_LAYERS:-999}"
+      LLAMA_ARG_API_KEY: "${LLAMA_ARG_API_KEY:-}"
       HF_TOKEN: "${HF_TOKEN:-}"
     volumes:
       - llama-cpp-cache:/root/.cache
