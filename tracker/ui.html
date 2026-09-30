@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>llama tracker</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --border:#262b36; --text:#e6e8ee;
+          --muted:#8a91a3; --accent:#5b8cff; --ok:#3fbf7f; --err:#e5604f; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.45 -apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px;
+           background:var(--panel); border-bottom:1px solid var(--border); }
+  header h1 { font-size:16px; margin:0; }
+  header .stats { color:var(--muted); font-size:12px; }
+  header button { margin-left:auto; }
+  .wrap { display:flex; height:calc(100vh - 49px); }
+  .left { width:46%; min-width:380px; border-right:1px solid var(--border);
+          display:flex; flex-direction:column; }
+  .filters { display:flex; gap:8px; padding:10px; border-bottom:1px solid var(--border); }
+  input, select, button { background:#10131a; color:var(--text);
+          border:1px solid var(--border); border-radius:6px; padding:7px 10px; font-size:13px; }
+  button { cursor:pointer; background:#1c2230; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #list { overflow-y:auto; flex:1; }
+  .row { padding:9px 14px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .row:hover { background:#1a1f2a; }
+  .row.sel { background:#1d2434; border-left:3px solid var(--accent); }
+  .row .meta { font-size:11px; color:var(--muted); display:flex; gap:10px; margin-top:3px; }
+  .row .snip { color:var(--muted); white-space:nowrap; overflow:hidden;
+               text-overflow:ellipsis; margin-top:2px; }
+  .pill { padding:1px 7px; border-radius:9px; background:#222a3a; font-size:11px; }
+  .pill.ok { color:var(--ok); } .pill.err { color:var(--err); }
+  .right { flex:1; overflow-y:auto; padding:16px 20px; }
+  .right h2 { font-size:14px; margin:0 0 8px; }
+  .detail-meta { color:var(--muted); font-size:12px; margin-bottom:12px;
+                 display:flex; gap:14px; flex-wrap:wrap; }
+  pre { background:#10131a; border:1px solid var(--border); border-radius:8px;
+        padding:12px; overflow-x:auto; white-space:pre-wrap; word-break:break-word;
+        font-size:12.5px; max-height:38vh; overflow-y:auto; }
+  .actions { display:flex; gap:8px; margin:10px 0 16px; flex-wrap:wrap; }
+  .empty { color:var(--muted); padding:40px; text-align:center; }
+  #login { max-width:320px; margin:15vh auto; background:var(--panel);
+           padding:28px; border-radius:12px; border:1px solid var(--border); }
+  #login h1 { font-size:16px; margin:0 0 16px; }
+  #login input { width:100%; margin-bottom:10px; }
+  #login button { width:100%; }
+  #login .err { color:var(--err); font-size:12px; min-height:16px; margin-top:8px; }
+  .hidden { display:none !important; }
+  .pager { display:flex; gap:8px; align-items:center; justify-content:center;
+           padding:8px; border-top:1px solid var(--border); color:var(--muted); font-size:12px; }
+</style>
+</head>
+<body>
+<div id="login">
+  <h1>llama tracker</h1>
+  <input id="u" placeholder="username" autocomplete="username">
+  <input id="p" type="password" placeholder="password" autocomplete="current-password">
+  <button class="primary" onclick="doLogin()">Log in</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<div id="app" class="hidden">
+<header>
+  <h1>llama tracker</h1>
+  <span class="stats" id="stats"></span>
+  <button onclick="doLogout()">log out</button>
+</header>
+<div class="wrap">
+  <div class="left">
+    <div class="filters">
+      <input id="q" placeholder="search queries + outputs" style="flex:1"
+             onkeydown="if(event.key==='Enter')load(1)">
+      <select id="fmodel"><option value="">all models</option></select>
+      <select id="fstatus">
+        <option value="0">any status</option><option value="200">200</option>
+        <option value="400">400</option><option value="500">500</option>
+        <option value="502">502</option>
+      </select>
+      <button class="primary" onclick="load(1)">search</button>
+    </div>
+    <div id="list"></div>
+    <div class="pager">
+      <button onclick="load(page-1)">&larr;</button>
+      <span id="pageinfo"></span>
+      <button onclick="load(page+1)">&rarr;</button>
+    </div>
+  </div>
+  <div class="right" id="detail"><div class="empty">select a query</div></div>
+</div>
+</div>
+
+<script>
+let page = 1, perPage = 50, selected = null;
+
+async function api(path, opts) {
+  const r = await fetch('/track/api' + path, opts);
+  if (r.status === 401) { showLogin(); throw new Error('auth'); }
+  if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || r.status);
+  return r.json();
+}
+
+function showLogin() {
+  document.getElementById('login').classList.remove('hidden');
+  document.getElementById('app').classList.add('hidden');
+}
+function showApp() {
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+}
+
+async function doLogin() {
+  const err = document.getElementById('loginErr');
+  err.textContent = '';
+  try {
+    const r = await fetch('/track/api/login', {method:'POST',
+      headers:{'content-type':'application/json'},
+      body: JSON.stringify({username:u.value, password:p.value})});
+    if (!r.ok) throw new Error((await r.json().catch(()=>({}))).detail || 'failed');
+    showApp(); init();
+  } catch(e) { err.textContent = e.message; }
+}
+async function doLogout() { await fetch('/track/api/logout', {method:'POST'}); showLogin(); }
+
+const esc = s => (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtTs = t => new Date(t*1000).toLocaleString();
+
+async function init() {
+  try {
+    const s = await api('/stats');
+    document.getElementById('stats').textContent =
+      `${s.total} queries logged (${s.last_24h} in 24h) - upstream ${s.upstream} - db ${(s.db_bytes/1048576).toFixed(1)} MB`;
+    const sel = document.getElementById('fmodel');
+    const models = await api('/entries?per_page=1');
+    sel.innerHTML = '<option value="">all models</option>' +
+      (models.models||[]).map(m => `<option>${esc(m)}</option>`).join('');
+    load(1);
+  } catch(e) { if (e.message !== 'auth') console.error(e); }
+}
+
+async function load(p) {
+  page = Math.max(1, p);
+  const q = encodeURIComponent(document.getElementById('q').value);
+  const m = encodeURIComponent(document.getElementById('fmodel').value);
+  const st = document.getElementById('fstatus').value;
+  const d = await api(`/entries?q=${q}&model=${m}&status=${st}&page=${page}&per_page=${perPage}`);
+  const list = document.getElementById('list');
+  list.innerHTML = d.entries.map(e => `
+    <div class="row ${selected===e.id?'sel':''}" onclick="show(${e.id})">
+      <div><span class="pill ${e.status===200?'ok':'err'}">${e.status||'?'}</span>
+        <b>${esc(e.model||'')}</b> <span style="color:var(--muted)">${esc(e.path)}</span></div>
+      <div class="snip">${esc(e.prompt_snip||'(no prompt text)')}</div>
+      <div class="meta"><span>${fmtTs(e.ts)}</span><span>${e.latency_ms}ms</span>
+        ${e.prompt_tokens?`<span>${e.prompt_tokens}+${e.completion_tokens||0} tok</span>`:''}
+        ${e.rerun_of?'<span>rerun of #'+e.rerun_of+'</span>':''}
+        ${e.truncated?'<span>truncated</span>':''}
+        ${e.error?'<span style="color:var(--err)">'+esc(e.error)+'</span>':''}</div>
+    </div>`).join('') || '<div class="empty">no entries yet</div>';
+  document.getElementById('pageinfo').textContent =
+    `page ${d.page} / ${Math.max(1, Math.ceil(d.total/d.per_page))} (${d.total})`;
+}
+
+async function show(id) {
+  selected = id;
+  const e = await api('/entries/' + id);
+  let prettyReq = e.request_body;
+  try { prettyReq = JSON.stringify(JSON.parse(e.request_body), null, 2); } catch(_) {}
+  document.getElementById('detail').innerHTML = `
+    <h2>query #${e.id}</h2>
+    <div class="detail-meta">
+      <span>${fmtTs(e.ts)}</span><span>${e.method} ${esc(e.path)}</span>
+      <span>status ${e.status||'?'}</span><span>${e.latency_ms}ms</span>
+      ${e.model?`<span>model ${esc(e.model)}</span>`:''}
+      ${e.prompt_tokens?`<span>tokens ${e.prompt_tokens} + ${e.completion_tokens||0}</span>`:''}
+      ${e.rerun_of?`<span>rerun of <a href="#" onclick="show(${e.rerun_of});return false">#${e.rerun_of}</a></span>`:''}
+    </div>
+    <div class="actions">
+      <button onclick="rerun(${e.id})">re-run</button>
+      <button onclick="copyText(${e.id},'prompt')">copy query</button>
+      <button onclick="copyText(${e.id},'output')">copy output</button>
+      <button onclick="copyCurl(${e.id})">copy as curl</button>
+    </div>
+    <h2>output</h2>
+    <pre id="out">${esc(e.output_text || e.error || '(empty)')}</pre>
+    <h2>query (extracted)</h2>
+    <pre>${esc(e.prompt_text || '(none)')}</pre>
+    <h2>raw request</h2>
+    <pre>${esc(prettyReq)}</pre>`;
+}
+
+async function rerun(id) {
+  const r = await api('/entries/' + id + '/rerun', {method:'POST'});
+  if (r.ok) { show(r.new_entry_id); load(page); }
+  else alert('rerun failed: ' + (r.error || r.status));
+}
+
+async function copyText(id, field) {
+  const e = await api('/entries/' + id);
+  await navigator.clipboard.writeText(field === 'prompt' ? (e.prompt_text||'') : (e.output_text||''));
+}
+async function copyCurl(id) {
+  const e = await api('/entries/' + id);
+  await navigator.clipboard.writeText(
+    `curl ${location.origin}/${e.path} -H 'Content-Type: application/json' -d '${(e.request_body||'').replace(/'/g,"'\\''")}'`);
+}
+
+document.getElementById('p').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+(async () => { try { await api('/stats'); showApp(); init(); } catch(_) {} })();
+</script>
+</body>
+</html>
+

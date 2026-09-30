@@ -1,0 +1,38 @@
+# Standalone Coolify app: llama-tracker (llama.izdrail.com).
+# Deploys ONLY the tracker. The llama.cpp engine stays in its own Coolify service.
+services:
+  tracker:
+    build:
+      context: ./tracker
+    image: izdrail/llama-tracker:latest
+    container_name: llama-tracker
+    environment:
+      # Point at the llama.cpp engine service on port 8080. In Coolify this is
+      # the engine service's container name on its network; set it via env.
+      TRACKER_UPSTREAM: "${TRACKER_UPSTREAM:-http://llama-cpp:8080}"
+      AUTH_USERNAME: "${TRACKER_AUTH_USERNAME:-}"
+      AUTH_PASSWORD: "${TRACKER_AUTH_PASSWORD:-}"
+      SESSION_SECRET: "${TRACKER_SESSION_SECRET:-}"
+      TRACKER_API_TOKEN: "${TRACKER_API_TOKEN:-}"
+      TRACKER_MAX_LOG_MB: "${TRACKER_MAX_LOG_MB:-2048}"
+      TRACKER_MAX_BODY_KB: "${TRACKER_MAX_BODY_KB:-256}"
+    expose:
+      - '8088'
+    volumes:
+      - tracker-data:/data
+    networks:
+      - default
+      - engine-net
+    restart: unless-stopped
+
+networks:
+  engine-net:
+    # The Coolify network of the llama.cpp engine service. Set this to the
+    # network Coolify creates for the new llama engine service (the old
+    # l13mmnigmy0r5p1jvf9ojtz4 network belongs to ai.izdrail.com's Ollama
+    # service, which stays untouched).
+    name: llama-engine-net-TODO-coolify
+    external: true
+
+volumes:
+  tracker-data:
