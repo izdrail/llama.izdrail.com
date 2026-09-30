@@ -11,9 +11,16 @@ if [ -n "${LLAMA_ARG_API_KEY:-}" ]; then
   API_KEY_ARG="--api-key ${LLAMA_ARG_API_KEY}"
 fi
 
+# Per-model presets (e.g. embedding mode for nomic-embed-text).
+PRESET_ARG=""
+if [ -f "${LLAMA_ARG_MODELS_PRESET:-/models/models-preset.ini}" ]; then
+  PRESET_ARG="--models-preset ${LLAMA_ARG_MODELS_PRESET:-/models/models-preset.ini}"
+fi
+
 # shellcheck disable=SC2086
 exec /app/llama-server \
   $API_KEY_ARG \
+  $PRESET_ARG \
   --host 0.0.0.0 \
   --port 8080 \
   --models-dir "${LLAMA_ARG_MODELS_DIR:-/models}" \
