@@ -2,7 +2,14 @@
 set -eu
 
 # Defaults match the Dockerfile ENV; compose.yaml can override them.
+API_KEY_ARG=""
+if [ -n "${LLAMA_ARG_API_KEY:-}" ]; then
+  API_KEY_ARG="--api-key ${LLAMA_ARG_API_KEY}"
+fi
+
+# shellcheck disable=SC2086
 exec /app/llama-server \
+  $API_KEY_ARG \
   --host 0.0.0.0 \
   --port 8080 \
   --hf-repo "${LLAMA_CPP_HF_REPO:-unsloth/Qwen3-4B-GGUF}" \
