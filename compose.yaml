@@ -6,8 +6,8 @@ services:
       context: .
     image: izdrail/llama.izdrail.com:latest
     container_name: llama-cpp
-    ports:
-      - "${LLAMA_CPP_PORT:-8080}:8080"
+    expose:
+      - "8080"
     environment:
       LLAMA_CPP_HF_REPO: "${LLAMA_CPP_HF_REPO:-unsloth/Qwen3-4B-GGUF}"
       LLAMA_CPP_HF_FILE: "${LLAMA_CPP_HF_FILE:-Qwen3-4B-Q4_K_M.gguf}"
@@ -17,7 +17,13 @@ services:
       HF_TOKEN: "${HF_TOKEN:-}"
     volumes:
       - llama-cpp-cache:/root/.cache
-    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
 
 volumes:

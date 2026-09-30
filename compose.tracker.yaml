@@ -31,7 +31,7 @@ networks:
     # network Coolify creates for the new llama engine service (the old
     # l13mmnigmy0r5p1jvf9ojtz4 network belongs to ai.izdrail.com's Ollama
     # service, which stays untouched).
-    name: llama-engine-net-TODO-coolify
+    name: us1pgwxqk6n6bjkjgf8d1fpx
     external: true
 
 volumes:
